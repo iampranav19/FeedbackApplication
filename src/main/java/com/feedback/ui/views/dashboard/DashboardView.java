@@ -18,6 +18,8 @@ import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
+import com.vaadin.flow.component.notification.Notification;
+import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -45,6 +47,8 @@ public class DashboardView extends VerticalLayout {
 	private final ActionItemService actionItemService;
 	private final AuthenticationService authenticationService;
 	private User currentUser;
+	
+	private boolean hasRedirected = false; // Prevent infinite redirects
 
 	public DashboardView(FeedbackService feedbackService, UserService userService, ActionItemService actionItemService,
 			AuthenticationService authenticationService) {
@@ -53,14 +57,47 @@ public class DashboardView extends VerticalLayout {
 		this.actionItemService = actionItemService;
 		this.authenticationService = authenticationService;
 
-		// Spring Security now handles authentication - just get the current user
+		System.out.println("DashboardView: Constructor started");
+		
+		// FIXED: More defensive authentication check
 		this.currentUser = authenticationService.getCurrentUser();
-
-		// Safety check - this should not happen with proper security setup
+		
 		if (this.currentUser == null) {
-			System.err.println("ERROR: Current user is null in DashboardView - this should not happen!");
-			UI.getCurrent().navigate("login");
-			return;
+			System.err.println("DashboardView: Current user is null - authentication issue detected");
+			
+			// Instead of immediately redirecting, show error message and provide login link
+			if (!hasRedirected) {
+				hasRedirected = true;
+				
+				// Show error message with login option
+				VerticalLayout errorLayout = new VerticalLayout();
+				errorLayout.setAlignItems(FlexComponent.Alignment.CENTER);
+				errorLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.CENTER);
+				errorLayout.setSizeFull();
+				
+				H2 errorTitle = new H2("Authentication Required");
+				Span errorMessage = new Span("Please log in to access the dashboard.");
+				
+				Button loginButton = new Button("Go to Login");
+				loginButton.addClickListener(e -> {
+					try {
+						// Clear any existing session data
+						authenticationService.logout();
+						UI.getCurrent().navigate("login");
+					} catch (Exception ex) {
+						System.err.println("Error navigating to login: " + ex.getMessage());
+						UI.getCurrent().getPage().reload();
+					}
+				});
+				
+				errorLayout.add(errorTitle, errorMessage, loginButton);
+				add(errorLayout);
+				return;
+			} else {
+				// Already tried to redirect, show minimal error
+				add(new Span("Authentication error. Please refresh the page."));
+				return;
+			}
 		}
 
 		System.out.println("DashboardView loaded for user: " + currentUser.getFullName());
@@ -72,6 +109,8 @@ public class DashboardView extends VerticalLayout {
 
 		// Create dashboard content
 		createDashboardContent();
+		
+		System.out.println("DashboardView: Successfully initialized");
 	}
 
 	private void createDashboardContent() {
@@ -96,7 +135,18 @@ public class DashboardView extends VerticalLayout {
         } catch (Exception e) {
             // Better error handling
             System.err.println("Error creating dashboard content: " + e.getMessage());
-            add(new Span("Error loading dashboard. Please try refreshing the page."));
+            e.printStackTrace();
+            
+            // Show user-friendly error message
+            VerticalLayout errorLayout = new VerticalLayout();
+            errorLayout.setAlignItems(FlexComponent.Alignment.CENTER);
+            
+            Span errorMessage = new Span("Error loading dashboard content. Please try refreshing the page.");
+            Button refreshButton = new Button("Refresh Page");
+            refreshButton.addClickListener(e2 -> UI.getCurrent().getPage().reload());
+            
+            errorLayout.add(errorMessage, refreshButton);
+            add(errorLayout);
         }
     }
 

@@ -15,7 +15,6 @@ import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
-import com.vaadin.flow.router.RouterLink;
 
 public class MainLayout extends AppLayout {
 
@@ -56,7 +55,8 @@ public class MainLayout extends AppLayout {
 
 			header.add(logo, userInfo, logoutButton);
 			
-			System.out.println("MainLayout: Header created for user: " + currentUser.getFullName());
+			System.out.println("MainLayout: Header created for user: " + currentUser.getFullName() + 
+			                  " (Role: " + currentUser.getRole().getName() + ")");
 		} else {
 			header.add(logo);
 			System.out.println("MainLayout: Header created without user info");
@@ -87,7 +87,8 @@ public class MainLayout extends AppLayout {
 			return; // Don't create drawer for unauthenticated users
 		}
 
-		System.out.println("MainLayout: Creating drawer for user: " + currentUser.getFullName());
+		System.out.println("MainLayout: Creating drawer for user: " + currentUser.getFullName() + 
+		                  " (Role: " + currentUser.getRole().getName() + ", SuperAdmin: " + currentUser.isSuperAdmin() + ")");
 
 		VerticalLayout navigation = new VerticalLayout();
 		navigation.setSizeFull();
@@ -103,7 +104,14 @@ public class MainLayout extends AppLayout {
 		addNavigationItem(navigation, "Profile", VaadinIcon.USER, "profile");
 
 		// Admin section - only show for privileged users
-		if (currentUser.isSuperAdmin() || "ADMIN".equals(currentUser.getRole().getName()) || "MANAGER".equals(currentUser.getRole().getName())) {
+		String roleName = currentUser.getRole().getName();
+		boolean isAdmin = "SUPER_ADMIN".equals(roleName) || "ADMIN".equals(roleName);
+		boolean isManager = "MANAGER".equals(roleName);
+		boolean isSuperAdmin = "SUPER_ADMIN".equals(roleName);
+		
+		System.out.println("MainLayout: Role checks - isAdmin: " + isAdmin + ", isManager: " + isManager + ", isSuperAdmin: " + isSuperAdmin);
+		
+		if (isAdmin || isManager) {
 			navigation.add(new Hr());
 
 			Span adminLabel = new Span("Administration");
@@ -115,15 +123,21 @@ public class MainLayout extends AppLayout {
 					.set("font-size", "var(--lumo-font-size-xs)");
 			navigation.add(adminLabel);
 
-			if (currentUser.isSuperAdmin() || "ADMIN".equals(currentUser.getRole().getName())) {
+			// Users management - only for SUPER_ADMIN and ADMIN
+			if (isAdmin) {
 				addNavigationItem(navigation, "Users", VaadinIcon.USERS, "users");
+				System.out.println("MainLayout: Added Users navigation for " + roleName);
 			}
 			
-			if (currentUser.isSuperAdmin() || "ADMIN".equals(currentUser.getRole().getName()) || "MANAGER".equals(currentUser.getRole().getName())) {
+			// Templates - for SUPER_ADMIN, ADMIN, and MANAGER
+			if (isAdmin || isManager) {
 				addNavigationItem(navigation, "Templates", VaadinIcon.FILE_TEXT, "templates");
+				System.out.println("MainLayout: Added Templates navigation for " + roleName);
 			}
 			
-			System.out.println("MainLayout: Added admin navigation items for user role: " + currentUser.getRole().getName());
+			System.out.println("MainLayout: Added admin navigation items for user role: " + roleName);
+		} else {
+			System.out.println("MainLayout: User role '" + roleName + "' does not have admin access");
 		}
 
 		addToDrawer(navigation);
@@ -154,6 +168,17 @@ public class MainLayout extends AppLayout {
 		item.addClickListener(e -> {
 			try {
 				System.out.println("MainLayout: Navigating to route: " + route);
+				
+				// Additional debugging for Users route
+				if ("users".equals(route)) {
+					User currentUser = authenticationService.getCurrentUser();
+					if (currentUser != null) {
+						System.out.println("MainLayout: Attempting to navigate to Users with user: " + 
+						                  currentUser.getFullName() + " (Role: " + currentUser.getRole().getName() + 
+						                  ", SuperAdmin: " + currentUser.isSuperAdmin() + ")");
+					}
+				}
+				
 				UI.getCurrent().navigate(route);
 			} catch (Exception ex) {
 				System.err.println("MainLayout: Navigation error to " + route + ": " + ex.getMessage());
@@ -168,5 +193,7 @@ public class MainLayout extends AppLayout {
 		
 		item.add(itemIcon, label);
 		navigation.add(item);
+		
+		System.out.println("MainLayout: Added navigation item: " + text + " -> " + route);
 	}
 }

@@ -25,7 +25,7 @@ import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.binder.Binder;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
-import jakarta.annotation.security.RolesAllowed;
+import jakarta.annotation.security.PermitAll;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -33,7 +33,7 @@ import java.util.List;
 
 @Route(value = "templates", layout = MainLayout.class)
 @PageTitle("Feedback Templates | Feedback System")
-@RolesAllowed({"ROLE_SUPER_ADMIN", "ROLE_ADMIN", "ROLE_MANAGER"})
+@PermitAll  // Changed from @RolesAllowed
 public class TemplateView extends VerticalLayout {
 
     private final FeedbackTemplateService templateService;
@@ -54,8 +54,25 @@ public class TemplateView extends VerticalLayout {
         
         System.out.println("TemplateView: Constructor started");
         
-        // Spring Security ensures authentication and role authorization
-        // The @RolesAllowed annotation handles authorization automatically
+        // MANUAL AUTHORIZATION CHECK
+        com.feedback.model.User currentUser = authenticationService.getCurrentUser();
+        if (currentUser == null) {
+            System.out.println("TemplateView: No authenticated user, redirecting to login");
+            showError("Please log in to access this page");
+            UI.getCurrent().navigate("login");
+            return;
+        }
+        
+        // Check if user has required role for template management
+        String roleName = currentUser.getRole().getName();
+        if (!"SUPER_ADMIN".equals(roleName) && !"ADMIN".equals(roleName) && !"MANAGER".equals(roleName)) {
+            System.out.println("TemplateView: User " + currentUser.getFullName() + " with role " + roleName + " does not have access");
+            showError("Access denied. You need admin or manager privileges to access this page.");
+            UI.getCurrent().navigate("");
+            return;
+        }
+        
+        System.out.println("TemplateView: Access granted for user: " + currentUser.getFullName() + " (Role: " + roleName + ")");
         
         addClassName("template-view");
         setSizeFull();

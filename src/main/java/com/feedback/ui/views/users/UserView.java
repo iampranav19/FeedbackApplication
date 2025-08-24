@@ -28,13 +28,13 @@ import com.vaadin.flow.data.binder.ValidationException;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 
-import jakarta.annotation.security.RolesAllowed;
+import jakarta.annotation.security.PermitAll;
 
 import java.time.format.DateTimeFormatter;
 
 @Route(value = "users", layout = MainLayout.class)
 @PageTitle("Users | Feedback System")
-@RolesAllowed({"ROLE_SUPER_ADMIN", "ROLE_ADMIN"})
+@PermitAll  // <-- Changed from @RolesAllowed
 public class UserView extends VerticalLayout {
 
     private final UserService userService;
@@ -60,17 +60,28 @@ public class UserView extends VerticalLayout {
 
         System.out.println("UserView: Constructor started");
 
+        // MANUAL AUTHORIZATION CHECK
+        User currentUser = authenticationService.getCurrentUser();
+        if (currentUser == null) {
+            System.out.println("UserView: No authenticated user, redirecting to login");
+            showError("Please log in to access this page");
+            UI.getCurrent().navigate("login");
+            return;
+        }
+        
+        // Check if user has required role for user management
+        String roleName = currentUser.getRole().getName();
+        if (!"SUPER_ADMIN".equals(roleName) && !"ADMIN".equals(roleName)) {
+            System.out.println("UserView: User " + currentUser.getFullName() + " with role " + roleName + " does not have access");
+            showError("Access denied. You need administrator privileges to access this page.");
+            UI.getCurrent().navigate("");
+            return;
+        }
+        
+        System.out.println("UserView: Access granted for user: " + currentUser.getFullName() + " (Role: " + roleName + ")");
+
         addClassName("user-view");
         setSizeFull();
-
-        // Diagnostic: Print current user and authorities
-        try {
-            User user = authenticationService.getCurrentUser();
-            System.out.println("Current User: " + (user != null ? user.getUsername() : "null"));
-            // You can also log session/security context if needed
-        } catch (Exception e) {
-            System.err.println("Error getting current user: " + e.getMessage());
-        }
 
         try {
             configureGrid();
@@ -127,6 +138,7 @@ public class UserView extends VerticalLayout {
         return toolbar;
     }
 
+    // Rest of your existing methods remain unchanged...
     private void openUserForm(User user) {
         boolean isNewUser = user.getId() == null;
         currentEditingUser = user;

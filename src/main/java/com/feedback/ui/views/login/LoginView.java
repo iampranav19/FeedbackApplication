@@ -14,6 +14,8 @@ import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.EmailField;
 import com.vaadin.flow.component.textfield.PasswordField;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
@@ -21,24 +23,21 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 @Route("login")
 @PageTitle("Login | Feedback System")
 @AnonymousAllowed
-public class LoginView extends VerticalLayout {
+public class LoginView extends VerticalLayout implements BeforeEnterObserver {
 
     private final AuthenticationService authenticationService;
     
     private final EmailField email = new EmailField("Email");
     private final PasswordField password = new PasswordField("Password");
     private final Button loginButton = new Button("Login");
+    
+    private boolean hasRedirected = false; // Prevent infinite redirects
 
     public LoginView(AuthenticationService authenticationService) {
         this.authenticationService = authenticationService;
         
-        // Check if user is already authenticated - SIMPLIFIED
-        if (authenticationService.isAuthenticated()) {
-            System.out.println("User already authenticated, redirecting to dashboard");
-            UI.getCurrent().navigate("");
-            return;
-        }
-
+        System.out.println("LoginView: Initializing login view");
+        
         addClassName("login-view");
         setSizeFull();
         setAlignItems(FlexComponent.Alignment.CENTER);
@@ -108,26 +107,68 @@ public class LoginView extends VerticalLayout {
             return;
         }
 
-        System.out.println("Attempting login for: " + emailValue);
+        System.out.println("LoginView: Attempting login for: " + emailValue);
 
         try {
             if (authenticationService.authenticate(emailValue, passwordValue)) {
-                System.out.println("Authentication successful for: " + emailValue);
+                System.out.println("LoginView: Authentication successful for: " + emailValue);
                 
-                // SIMPLIFIED redirect logic
                 showSuccess("Login successful!");
-                UI.getCurrent().navigate("");
+                
+                // Use getUI() to ensure we have the current UI context
+                // Add a small delay to ensure the success message is visible
+                UI currentUI = UI.getCurrent();
+                if (currentUI != null) {
+                    hasRedirected = true; // Prevent any other redirects
+                    currentUI.access(() -> {
+                        try {
+                            Thread.sleep(500); // Small delay for user feedback
+                        } catch (InterruptedException ex) {
+                            Thread.currentThread().interrupt();
+                        }
+                        currentUI.navigate("");
+                        currentUI.push();
+                    });
+                } else {
+                    // Fallback - direct navigation
+                    UI.getCurrent().navigate("");
+                }
                 
             } else {
-                System.out.println("Authentication failed for: " + emailValue);
+                System.out.println("LoginView: Authentication failed for: " + emailValue);
                 showError("Invalid email or password");
                 password.clear();
                 password.focus();
             }
         } catch (Exception e) {
-            System.err.println("Login error: " + e.getMessage());
+            System.err.println("LoginView: Login error: " + e.getMessage());
             e.printStackTrace();
             showError("Login error: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void beforeEnter(BeforeEnterEvent beforeEnterEvent) {
+        // FIXED: Add protection against infinite redirects
+        if (hasRedirected) {
+            System.out.println("LoginView: Already redirected, skipping authentication check");
+            return;
+        }
+        
+        // Check if user is already authenticated
+        try {
+            if (authenticationService.isAuthenticated()) {
+                System.out.println("LoginView: User already authenticated, redirecting to dashboard");
+                hasRedirected = true; // Mark as redirected
+                beforeEnterEvent.forwardTo("");
+                return;
+            } else {
+                System.out.println("LoginView: User not authenticated, showing login form");
+            }
+        } catch (Exception e) {
+            System.err.println("LoginView: Error checking authentication: " + e.getMessage());
+            e.printStackTrace();
+            // Continue to show login form on error
         }
     }
 

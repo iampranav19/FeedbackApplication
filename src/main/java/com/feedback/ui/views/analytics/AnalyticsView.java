@@ -3,15 +3,19 @@ package com.feedback.ui.views.analytics;
 import com.feedback.model.Feedback;
 import com.feedback.model.User;
 import com.feedback.service.ActionItemService;
+import com.feedback.service.AuthenticationService;
 import com.feedback.service.FeedbackService;
 import com.feedback.service.UserService;
 import com.feedback.ui.MainLayout;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.component.notification.Notification;
+import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -32,27 +36,44 @@ import java.util.stream.Collectors;
 
 @Route(value = "analytics", layout = MainLayout.class)
 @PageTitle("Analytics | Feedback System")
-@PermitAll
+@PermitAll  // All authenticated users can see analytics
 public class AnalyticsView extends VerticalLayout {
 
     private final FeedbackService feedbackService;
     private final UserService userService;
     private final ActionItemService actionItemService;
+    private final AuthenticationService authenticationService;
     
     private final VerticalLayout chartsLayout = new VerticalLayout();
     private Tab feedbackVolumeTab;
     private Tab feedbackByDepartmentTab;
     private Tab feedbackByStatusTab;
     private Tab actionItemsTab;
+    
+    private User currentUser;
 
     public AnalyticsView(FeedbackService feedbackService, 
                          UserService userService,
-                         ActionItemService actionItemService) {
+                         ActionItemService actionItemService,
+                         AuthenticationService authenticationService) {
         this.feedbackService = feedbackService;
         this.userService = userService;
         this.actionItemService = actionItemService;
+        this.authenticationService = authenticationService;
         
         System.out.println("AnalyticsView: Constructor started");
+        
+        // MANUAL AUTHORIZATION CHECK
+        this.currentUser = authenticationService.getCurrentUser();
+        if (this.currentUser == null) {
+            System.err.println("CRITICAL: Current user is null in AnalyticsView!");
+            Notification.show("Please log in to access this page", 3000, Notification.Position.TOP_CENTER)
+                    .addThemeVariants(NotificationVariant.LUMO_ERROR);
+            UI.getCurrent().navigate("login");
+            return;
+        }
+        
+        System.out.println("AnalyticsView: User authenticated: " + currentUser.getFullName());
         
         addClassName("analytics-view");
         setSizeFull();
@@ -415,5 +436,10 @@ public class AnalyticsView extends VerticalLayout {
         }
         
         chartsLayout.add(actionItemsLayout);
+    }
+    
+    private void showError(String message) {
+        Notification notification = Notification.show(message, 4000, Notification.Position.TOP_CENTER);
+        notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
     }
 }
