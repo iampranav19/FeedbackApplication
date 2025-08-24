@@ -2,12 +2,13 @@ package com.feedback.ui.views.feedback;
 
 import com.feedback.model.ActionItem;
 import com.feedback.model.Feedback;
-import com.feedback.model.PrivacyLevel;
 import com.feedback.model.User;
 import com.feedback.service.ActionItemService;
+import com.feedback.service.AuthenticationService;
 import com.feedback.service.FeedbackService;
 import com.feedback.service.UserService;
 import com.feedback.ui.MainLayout;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datepicker.DatePicker;
@@ -27,6 +28,7 @@ import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import jakarta.annotation.security.PermitAll;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -35,48 +37,73 @@ import java.util.List;
 
 @Route(value = "feedback-list", layout = MainLayout.class)
 @PageTitle("View Feedback | Feedback System")
+@PermitAll
 public class FeedbackListView extends VerticalLayout {
 
     private final FeedbackService feedbackService;
     private final UserService userService;
     private final ActionItemService actionItemService;
+    private final AuthenticationService authenticationService;
     private final Grid<Feedback> grid = new Grid<>(Feedback.class);
     private Tab receivedTab;
     private Tab sentTab;
-    private User currentUser; // In a real app, this would be the logged-in user
+    private User currentUser;
 
-    public FeedbackListView(FeedbackService feedbackService, UserService userService, ActionItemService actionItemService) {
+    public FeedbackListView(FeedbackService feedbackService, 
+                           UserService userService, 
+                           ActionItemService actionItemService,
+                           AuthenticationService authenticationService) {
         this.feedbackService = feedbackService;
         this.userService = userService;
         this.actionItemService = actionItemService;
+        this.authenticationService = authenticationService;
         
-        // For the MVP, we'll use the admin user as the current user
-        this.currentUser = userService.findUserById(1L).orElse(null);
+        System.out.println("FeedbackListView: Constructor started");
+        
+        // Spring Security ensures authentication - just get the current user
+        this.currentUser = authenticationService.getCurrentUser();
+        
+        // Safety check - if user is null, something is wrong with authentication
+        if (this.currentUser == null) {
+            System.err.println("CRITICAL: Current user is null in FeedbackListView!");
+            add(new Span("Authentication error. Please refresh the page and try again."));
+            return;
+        }
+        
+        System.out.println("FeedbackListView: User authenticated: " + currentUser.getFullName());
 
         addClassName("feedback-list-view");
         setSizeFull();
 
-        configureGrid();
-        
-        HorizontalLayout filterLayout = new HorizontalLayout();
-        ComboBox<String> statusFilter = new ComboBox<>("Status");
-        statusFilter.setItems("All", "Open", "Acknowledged", "In Progress", "Completed");
-        statusFilter.setValue("All");
-        statusFilter.addValueChangeListener(e -> updateList());
-        
-        filterLayout.add(statusFilter);
+        try {
+            configureGrid();
+            
+            HorizontalLayout filterLayout = new HorizontalLayout();
+            ComboBox<String> statusFilter = new ComboBox<>("Status");
+            statusFilter.setItems("All", "Open", "Acknowledged", "In Progress", "Completed");
+            statusFilter.setValue("All");
+            statusFilter.addValueChangeListener(e -> updateList());
+            
+            filterLayout.add(statusFilter);
 
-        Tabs tabs = createTabs();
-        
-        add(
-                new H2("Feedback"),
-                tabs,
-                filterLayout,
-                grid
-        );
+            Tabs tabs = createTabs();
+            
+            add(
+                    new H2("Feedback"),
+                    tabs,
+                    filterLayout,
+                    grid
+            );
 
-        // Default to showing received feedback
-        showReceivedFeedback();
+            // Default to showing received feedback
+            showReceivedFeedback();
+            
+            System.out.println("FeedbackListView: Successfully initialized for user: " + currentUser.getFullName());
+        } catch (Exception e) {
+            System.err.println("Error initializing FeedbackListView: " + e.getMessage());
+            e.printStackTrace();
+            add(new Span("Error loading feedback list. Please try again."));
+        }
     }
 
     private Tabs createTabs() {
@@ -250,7 +277,6 @@ public class FeedbackListView extends VerticalLayout {
             actionItem.setCreatedBy(currentUser);
             actionItem.setCreatedAt(LocalDateTime.now());
             
-            // Use the injected actionItemService directly
             actionItemService.saveActionItem(actionItem);
             dialog.close();
             Notification.show("Action item created");

@@ -21,6 +21,7 @@ import com.vaadin.flow.component.tabs.Tabs;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import jakarta.annotation.security.PermitAll;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -31,6 +32,7 @@ import java.util.stream.Collectors;
 
 @Route(value = "analytics", layout = MainLayout.class)
 @PageTitle("Analytics | Feedback System")
+@PermitAll
 public class AnalyticsView extends VerticalLayout {
 
     private final FeedbackService feedbackService;
@@ -50,20 +52,30 @@ public class AnalyticsView extends VerticalLayout {
         this.userService = userService;
         this.actionItemService = actionItemService;
         
+        System.out.println("AnalyticsView: Constructor started");
+        
         addClassName("analytics-view");
         setSizeFull();
         
-        Tabs tabs = createTabs();
-        
-        add(
-                new H2("Feedback Analytics"),
-                tabs,
-                createFilters(),
-                chartsLayout
-        );
-        
-        // Default to showing feedback volume
-        showFeedbackVolumeChart();
+        try {
+            Tabs tabs = createTabs();
+            
+            add(
+                    new H2("Feedback Analytics"),
+                    tabs,
+                    createFilters(),
+                    chartsLayout
+            );
+            
+            // Default to showing feedback volume
+            showFeedbackVolumeChart();
+            
+            System.out.println("AnalyticsView: Successfully initialized");
+        } catch (Exception e) {
+            System.err.println("Error initializing AnalyticsView: " + e.getMessage());
+            e.printStackTrace();
+            add(new Span("Error loading analytics. Please try again."));
+        }
     }
     
     private Tabs createTabs() {
@@ -358,40 +370,7 @@ public class AnalyticsView extends VerticalLayout {
         }
         
         statusLayout.add(statusBars);
-        
-        // Add response time visualization
-        VerticalLayout responseTimeLayout = new VerticalLayout();
-        responseTimeLayout.setWidth("100%");
-        responseTimeLayout.add(new H3("Average Response Time by Department"));
-        
-        // Create a bar chart for response times (mock data)
-        Grid<Map.Entry<String, Double>> responseGrid = new Grid<>();
-        
-        // Mock data
-        Map<String, Double> responseTimes = new HashMap<>();
-        responseTimes.put("IT", 2.1);
-        responseTimes.put("HR", 1.5);
-        responseTimes.put("Sales", 3.2);
-        
-        responseGrid.setItems(responseTimes.entrySet());
-        responseGrid.addColumn(Map.Entry::getKey).setHeader("Department");
-        responseGrid.addColumn(entry -> String.format("%.1f days", entry.getValue())).setHeader("Response Time");
-        
-        responseGrid.addComponentColumn(entry -> {
-            double time = entry.getValue();
-            // Scale to a reasonable value (assuming max is around 5 days)
-            double ratio = time / 5.0;
-            
-            ProgressBar bar = new ProgressBar();
-            bar.setValue(ratio);
-            bar.setWidth("200px");
-            
-            return bar;
-        }).setHeader("Visualization");
-        
-        responseTimeLayout.add(responseGrid);
-        
-        chartsLayout.add(statusLayout, responseTimeLayout);
+        chartsLayout.add(statusLayout);
     }
     
     private void showActionItemsChart() {
@@ -399,9 +378,9 @@ public class AnalyticsView extends VerticalLayout {
         
         VerticalLayout actionItemsLayout = new VerticalLayout();
         actionItemsLayout.setWidth("100%");
-        actionItemsLayout.add(new H3("Action Items by Status"));
+        actionItemsLayout.add(new H3("Action Items Overview"));
         
-        // Mock data - in a real implementation we would use actionItemService
+        // Mock data for demonstration - in a real implementation you would use actionItemService
         Map<String, Integer> actionItemsByStatus = new HashMap<>();
         actionItemsByStatus.put("Open", 10);
         actionItemsByStatus.put("In Progress", 7);
@@ -435,96 +414,6 @@ public class AnalyticsView extends VerticalLayout {
             actionItemsLayout.add(row);
         }
         
-        // Add visualization for action items by priority
-        VerticalLayout priorityLayout = new VerticalLayout();
-        priorityLayout.setWidth("100%");
-        priorityLayout.add(new H3("Action Items by Priority"));
-        
-        // Mock data
-        Map<String, Integer> actionItemsByPriority = new HashMap<>();
-        actionItemsByPriority.put("High", 8);
-        actionItemsByPriority.put("Medium", 12);
-        actionItemsByPriority.put("Low", 4);
-        
-        // Define colors for priorities
-        Map<String, String> priorityColors = new HashMap<>();
-        priorityColors.put("High", "var(--lumo-error-color)");
-        priorityColors.put("Medium", "var(--lumo-primary-color)");
-        priorityColors.put("Low", "var(--lumo-success-color)");
-        
-        HorizontalLayout priorityBars = new HorizontalLayout();
-        priorityBars.setWidthFull();
-        priorityBars.setJustifyContentMode(FlexComponent.JustifyContentMode.CENTER);
-        
-        // Create visualization for each priority
-        for (Map.Entry<String, Integer> entry : actionItemsByPriority.entrySet()) {
-            String priority = entry.getKey();
-            int count = entry.getValue();
-            
-            VerticalLayout box = new VerticalLayout();
-            box.setSpacing(false);
-            box.setPadding(false);
-            box.setAlignItems(FlexComponent.Alignment.CENTER);
-            
-            // Create box with count
-            Div countBox = new Div();
-            countBox.setWidth("80px");
-            countBox.setHeight("80px");
-            countBox.getStyle().set("background-color", priorityColors.getOrDefault(priority, "var(--lumo-primary-color)"));
-            countBox.getStyle().set("border-radius", "var(--lumo-border-radius-m)");
-            countBox.getStyle().set("display", "flex");
-            countBox.getStyle().set("align-items", "center");
-            countBox.getStyle().set("justify-content", "center");
-            
-            Span countLabel = new Span(String.valueOf(count));
-            countLabel.getStyle().set("color", "white");
-            countLabel.getStyle().set("font-size", "1.5em");
-            countLabel.getStyle().set("font-weight", "bold");
-            countBox.add(countLabel);
-            
-            Span priorityLabel = new Span(priority);
-            
-            box.add(countBox, priorityLabel);
-            priorityBars.add(box);
-        }
-        
-        priorityLayout.add(priorityBars);
-        
-        // Add department visualization
-        VerticalLayout deptLayout = new VerticalLayout();
-        deptLayout.setWidth("100%");
-        deptLayout.add(new H3("Action Items by Department"));
-        
-        // Mock data
-        Map<String, Integer> actionItemsByDepartment = new HashMap<>();
-        actionItemsByDepartment.put("IT", 12);
-        actionItemsByDepartment.put("HR", 8);
-        actionItemsByDepartment.put("Sales", 4);
-        
-        // Find maximum for scaling
-        int maxDeptCount = actionItemsByDepartment.values().stream().mapToInt(Integer::intValue).max().orElse(10);
-        
-        // Create a grid visualization
-        Grid<Map.Entry<String, Integer>> deptGrid = new Grid<>();
-        deptGrid.setItems(actionItemsByDepartment.entrySet());
-        
-        deptGrid.addColumn(Map.Entry::getKey).setHeader("Department");
-        deptGrid.addColumn(Map.Entry::getValue).setHeader("Count");
-        
-        deptGrid.addComponentColumn(entry -> {
-            int count = entry.getValue();
-            double ratio = (double) count / maxDeptCount;
-            
-            ProgressBar bar = new ProgressBar();
-            bar.setValue(ratio);
-            bar.setWidth("200px");
-            
-            return bar;
-        }).setHeader("Distribution");
-        
-        deptLayout.add(deptGrid);
-        
-        // Add all layouts to the main layout
-        chartsLayout.add(actionItemsLayout, priorityLayout, deptLayout);
+        chartsLayout.add(actionItemsLayout);
     }
 }

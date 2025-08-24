@@ -1,9 +1,11 @@
 package com.feedback.model;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import java.util.Set;
 
 @Entity
+@Table(name = "users")
 public class User {
     
     @Id
@@ -13,7 +15,16 @@ public class User {
     private String username;
     private String firstName;
     private String lastName;
+    
+    @Column(unique = true, nullable = false)
     private String email;
+    
+    @Column(nullable = false)
+    private String password; // This will store the hashed password
+    
+    private boolean isActive = true;
+    private LocalDateTime lastLogin;
+    private LocalDateTime createdAt;
     
     @ManyToOne
     private User manager;
@@ -26,6 +37,18 @@ public class User {
     
     @ManyToOne
     private Role role;
+    
+    // Constructors
+    public User() {}
+    
+    public User(String username, String firstName, String lastName, String email, String password) {
+        this.username = username;
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.email = email;
+        this.password = password;
+        this.createdAt = LocalDateTime.now();
+    }
     
     // Getters and Setters
     public Long getId() {
@@ -68,6 +91,38 @@ public class User {
         this.email = email;
     }
 
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public boolean isActive() {
+        return isActive;
+    }
+
+    public void setActive(boolean active) {
+        isActive = active;
+    }
+
+    public LocalDateTime getLastLogin() {
+        return lastLogin;
+    }
+
+    public void setLastLogin(LocalDateTime lastLogin) {
+        this.lastLogin = lastLogin;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
     public User getManager() {
         return manager;
     }
@@ -102,5 +157,16 @@ public class User {
     
     public String getFullName() {
         return firstName + " " + lastName;
+    }
+    
+    public boolean isSuperAdmin() {
+        return role != null && Role.SUPER_ADMIN.equals(role.getName());
+    }
+    
+    @PrePersist
+    protected void onCreate() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
     }
 }
