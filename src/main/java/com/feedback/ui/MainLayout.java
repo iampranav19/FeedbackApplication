@@ -1,199 +1,134 @@
 package com.feedback.ui;
 
-import com.feedback.model.User;
 import com.feedback.service.AuthenticationService;
+import com.feedback.ui.profile.ProfileView;
+import com.feedback.ui.views.actionitems.ActionItemView;
+import com.feedback.ui.views.analytics.AnalyticsView;
+import com.feedback.ui.views.appreciation.WallOfAppreciationView;
+import com.feedback.ui.views.dashboard.DashboardView;
+import com.feedback.ui.views.feedback.FeedbackFormView;
+import com.feedback.ui.views.feedback.FeedbackListView;
+import com.feedback.ui.views.templates.TemplateView;
+import com.feedback.ui.views.users.UserView;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.component.applayout.DrawerToggle;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.html.H1;
-import com.vaadin.flow.component.html.Hr;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.sidenav.SideNav;
+import com.vaadin.flow.component.sidenav.SideNavItem;
+import com.vaadin.flow.router.PageTitle;
+import com.vaadin.flow.theme.lumo.LumoUtility;
 
+/**
+ * The main view is a top-level placeholder for other views.
+ */
 public class MainLayout extends AppLayout {
 
-	private final AuthenticationService authenticationService;
+    private final AuthenticationService authenticationService;
+    
+    public MainLayout(AuthenticationService authenticationService) {
+        this.authenticationService = authenticationService;
+        createHeader();
+        createDrawer();
+    }
 
-	public MainLayout(AuthenticationService authenticationService) {
-		this.authenticationService = authenticationService;
+    private void createHeader() {
+        H1 logo = new H1("Feedback System");
+        logo.addClassNames(
+            LumoUtility.FontSize.LARGE,
+            LumoUtility.Margin.MEDIUM
+        );
 
-		System.out.println("MainLayout: Constructor started");
-		
-		// Spring Security ensures authentication for protected routes
-		createHeader();
-		createDrawer();
-		
-		System.out.println("MainLayout: Successfully created layout");
-	}
+        // User info and logout
+        com.feedback.model.User currentUser = authenticationService.getCurrentUser();
+        
+        HorizontalLayout header;
+        if (currentUser != null) {
+            Span welcomeText = new Span("Welcome, " + currentUser.getFirstName());
+            welcomeText.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.TextColor.SECONDARY);
+            
+            Button logoutButton = new Button("Logout", VaadinIcon.SIGN_OUT.create());
+            logoutButton.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
+            logoutButton.addClickListener(e -> {
+                authenticationService.logout();
+                UI.getCurrent().navigate("login");
+            });
+            
+            VerticalLayout userInfo = new VerticalLayout();
+            userInfo.setSpacing(false);
+            userInfo.setPadding(false);
+            userInfo.add(welcomeText);
+            
+            HorizontalLayout userSection = new HorizontalLayout();
+            userSection.setAlignItems(FlexComponent.Alignment.CENTER);
+            userSection.add(userInfo, logoutButton);
+            
+            header = new HorizontalLayout(new DrawerToggle(), logo);
+            header.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
+            header.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
+            header.setWidth("100%");
+            header.addClassNames(LumoUtility.Padding.Vertical.NONE, LumoUtility.Padding.Horizontal.MEDIUM);
+            
+            // Add user section to the right
+            header.add(userSection);
+        } else {
+            header = new HorizontalLayout(new DrawerToggle(), logo);
+            header.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
+            header.setWidth("100%");
+            header.addClassNames(LumoUtility.Padding.Vertical.NONE, LumoUtility.Padding.Horizontal.MEDIUM);
+        }
 
-	private void createHeader() {
-		H1 logo = new H1("Feedback System");
-		logo.addClassNames("text-l", "m-m");
+        addToNavbar(header);
+    }
 
-		HorizontalLayout header = new HorizontalLayout();
-		header.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
-		header.expand(logo);
-		header.setWidthFull();
-		header.addClassNames("py-0", "px-m");
+    private void createDrawer() {
+        com.feedback.model.User currentUser = authenticationService.getCurrentUser();
+        
+        SideNav nav = new SideNav();
+        
+        if (currentUser != null) {
+            // Main navigation items for all users
+            nav.addItem(new SideNavItem("Dashboard", DashboardView.class, VaadinIcon.DASHBOARD.create()));
+            nav.addItem(new SideNavItem("Give Feedback", FeedbackFormView.class, VaadinIcon.EDIT.create()));
+            nav.addItem(new SideNavItem("My Feedback", FeedbackListView.class, VaadinIcon.LIST.create()));
+            
+            // NEW: Wall of Appreciation - visible to all authenticated users
+            SideNavItem wallItem = new SideNavItem("Wall of Appreciation", WallOfAppreciationView.class, VaadinIcon.HEART.create());
+            // Add some special styling to make it stand out
+            wallItem.getElement().getStyle().set("--lumo-primary-color", "#e91e63");
+            nav.addItem(wallItem);
+            
+            nav.addItem(new SideNavItem("Action Items", ActionItemView.class, VaadinIcon.TASKS.create()));
+            nav.addItem(new SideNavItem("Analytics", AnalyticsView.class, VaadinIcon.CHART.create()));
+            nav.addItem(new SideNavItem("My Profile", ProfileView.class, VaadinIcon.USER.create()));
+            
+            // Admin/Manager only sections
+            String roleName = currentUser.getRole().getName();
+            if ("SUPER_ADMIN".equals(roleName) || "ADMIN".equals(roleName) || "MANAGER".equals(roleName)) {
+                // Add separator
+                nav.addItem(new SideNavItem("", "", null)); // Spacer
+                
+                // Templates management
+                nav.addItem(new SideNavItem("Templates", TemplateView.class, VaadinIcon.CLIPBOARD_TEXT.create()));
+            }
+            
+            // Super Admin / Admin only
+            if ("SUPER_ADMIN".equals(roleName) || "ADMIN".equals(roleName)) {
+                nav.addItem(new SideNavItem("User Management", UserView.class, VaadinIcon.USERS.create()));
+            }
+        } else {
+            // For non-authenticated users (shouldn't really happen due to security)
+            nav.addItem(new SideNavItem("Login", "login", VaadinIcon.SIGN_IN.create()));
+        }
 
-		// Get current user for header display
-		User currentUser = authenticationService.getCurrentUser();
-		if (currentUser != null) {
-			String firstName = currentUser.getFirstName() != null ? currentUser.getFirstName() : "User";
-			Span userInfo = new Span("Welcome, " + firstName);
-			userInfo.getStyle().set("margin-right", "var(--lumo-space-m)");
-
-			Button logoutButton = new Button("Logout", new Icon(VaadinIcon.SIGN_OUT));
-			logoutButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-			logoutButton.addClickListener(e -> logout());
-
-			header.add(logo, userInfo, logoutButton);
-			
-			System.out.println("MainLayout: Header created for user: " + currentUser.getFullName() + 
-			                  " (Role: " + currentUser.getRole().getName() + ")");
-		} else {
-			header.add(logo);
-			System.out.println("MainLayout: Header created without user info");
-		}
-
-		addToNavbar(new DrawerToggle(), header);
-	}
-
-	private void logout() {
-		try {
-			System.out.println("MainLayout: Logout initiated");
-			authenticationService.logout();
-			// Use proper Vaadin navigation instead of direct page manipulation
-			UI.getCurrent().navigate("login");
-			System.out.println("MainLayout: Logout completed, navigating to login");
-		} catch (Exception ex) {
-			System.err.println("MainLayout: Logout error: " + ex.getMessage());
-			ex.printStackTrace();
-			// Fallback: reload page
-			UI.getCurrent().getPage().reload();
-		}
-	}
-
-	private void createDrawer() {
-		User currentUser = authenticationService.getCurrentUser();
-		if (currentUser == null) {
-			System.out.println("MainLayout: No current user, skipping drawer creation");
-			return; // Don't create drawer for unauthenticated users
-		}
-
-		System.out.println("MainLayout: Creating drawer for user: " + currentUser.getFullName() + 
-		                  " (Role: " + currentUser.getRole().getName() + ", SuperAdmin: " + currentUser.isSuperAdmin() + ")");
-
-		VerticalLayout navigation = new VerticalLayout();
-		navigation.setSizeFull();
-		navigation.setPadding(false);
-		navigation.setSpacing(false);
-
-		// Core navigation items - these should be accessible to all authenticated users
-		addNavigationItem(navigation, "Dashboard", VaadinIcon.DASHBOARD, "");
-		addNavigationItem(navigation, "Give Feedback", VaadinIcon.EDIT, "feedback-form");
-		addNavigationItem(navigation, "View Feedback", VaadinIcon.LIST, "feedback-list");
-		addNavigationItem(navigation, "Action Items", VaadinIcon.TASKS, "action-items");
-		addNavigationItem(navigation, "Analytics", VaadinIcon.CHART, "analytics");
-		addNavigationItem(navigation, "Profile", VaadinIcon.USER, "profile");
-
-		// Admin section - only show for privileged users
-		String roleName = currentUser.getRole().getName();
-		boolean isAdmin = "SUPER_ADMIN".equals(roleName) || "ADMIN".equals(roleName);
-		boolean isManager = "MANAGER".equals(roleName);
-		boolean isSuperAdmin = "SUPER_ADMIN".equals(roleName);
-		
-		System.out.println("MainLayout: Role checks - isAdmin: " + isAdmin + ", isManager: " + isManager + ", isSuperAdmin: " + isSuperAdmin);
-		
-		if (isAdmin || isManager) {
-			navigation.add(new Hr());
-
-			Span adminLabel = new Span("Administration");
-			adminLabel.addClassNames("block", "font-medium", "text-s", "text-secondary", "px-m", "py-s");
-			adminLabel.getStyle()
-					.set("color", "var(--lumo-secondary-text-color)")
-					.set("font-weight", "bold")
-					.set("text-transform", "uppercase")
-					.set("font-size", "var(--lumo-font-size-xs)");
-			navigation.add(adminLabel);
-
-			// Users management - only for SUPER_ADMIN and ADMIN
-			if (isAdmin) {
-				addNavigationItem(navigation, "Users", VaadinIcon.USERS, "users");
-				System.out.println("MainLayout: Added Users navigation for " + roleName);
-			}
-			
-			// Templates - for SUPER_ADMIN, ADMIN, and MANAGER
-			if (isAdmin || isManager) {
-				addNavigationItem(navigation, "Templates", VaadinIcon.FILE_TEXT, "templates");
-				System.out.println("MainLayout: Added Templates navigation for " + roleName);
-			}
-			
-			System.out.println("MainLayout: Added admin navigation items for user role: " + roleName);
-		} else {
-			System.out.println("MainLayout: User role '" + roleName + "' does not have admin access");
-		}
-
-		addToDrawer(navigation);
-		System.out.println("MainLayout: Drawer created successfully");
-	}
-
-	private void addNavigationItem(VerticalLayout navigation, String text, VaadinIcon icon, String route) {
-		HorizontalLayout item = new HorizontalLayout();
-		item.setSpacing(true);
-		item.setPadding(false);
-		item.setAlignItems(FlexComponent.Alignment.CENTER);
-		item.getStyle()
-			.set("padding", "var(--lumo-space-s) var(--lumo-space-m)")
-			.set("cursor", "pointer")
-			.set("border-radius", "var(--lumo-border-radius-m)")
-			.set("color", "var(--lumo-body-text-color)")
-			.set("text-decoration", "none");
-
-		// Add hover effect
-		item.getElement().addEventListener("mouseover", e -> {
-			item.getStyle().set("background-color", "var(--lumo-contrast-5pct)");
-		});
-		item.getElement().addEventListener("mouseout", e -> {
-			item.getStyle().remove("background-color");
-		});
-
-		// Add click handler
-		item.addClickListener(e -> {
-			try {
-				System.out.println("MainLayout: Navigating to route: " + route);
-				
-				// Additional debugging for Users route
-				if ("users".equals(route)) {
-					User currentUser = authenticationService.getCurrentUser();
-					if (currentUser != null) {
-						System.out.println("MainLayout: Attempting to navigate to Users with user: " + 
-						                  currentUser.getFullName() + " (Role: " + currentUser.getRole().getName() + 
-						                  ", SuperAdmin: " + currentUser.isSuperAdmin() + ")");
-					}
-				}
-				
-				UI.getCurrent().navigate(route);
-			} catch (Exception ex) {
-				System.err.println("MainLayout: Navigation error to " + route + ": " + ex.getMessage());
-				ex.printStackTrace();
-			}
-		});
-
-		Icon itemIcon = icon.create();
-		itemIcon.getStyle().set("color", "var(--lumo-contrast-60pct)");
-		
-		Span label = new Span(text);
-		
-		item.add(itemIcon, label);
-		navigation.add(item);
-		
-		System.out.println("MainLayout: Added navigation item: " + text + " -> " + route);
-	}
+        addToDrawer(nav);
+    }
 }

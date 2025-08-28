@@ -19,8 +19,13 @@ public class FeedbackTemplateService {
         this.feedbackTemplateRepository = feedbackTemplateRepository;
     }
     
+    // FIXED: Added @Transactional and collection initialization
+    @Transactional(readOnly = true)
     public List<FeedbackTemplate> findAllTemplates() {
-        return feedbackTemplateRepository.findAll();
+        List<FeedbackTemplate> templates = feedbackTemplateRepository.findAll();
+        // Force initialization of the questions collection for each template
+        templates.forEach(t -> t.getQuestions().size());
+        return templates;
     }
     
     @Transactional(readOnly = true)
