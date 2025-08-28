@@ -1,4 +1,3 @@
-
 package com.feedback.ui.views.dashboard;
 
 import com.feedback.model.Feedback;
@@ -115,9 +114,9 @@ public class DashboardView extends VerticalLayout {
 
 	private void createDashboardContent() {
 		try {
-			// Create stats layout
+			// Create stats layout - FIXED: Use privacy-aware count for total feedback
 			HorizontalLayout statsLayout = new HorizontalLayout(
-					createFeedbackStatCard("Total Feedback", feedbackService.findAllFeedback().size()),
+					createFeedbackStatCard("Visible Feedback", feedbackService.findVisibleFeedbackForUser(currentUser.getId()).size()),
 					createFeedbackStatCard("Unread Feedback", feedbackService.countUnreadFeedback(currentUser.getId())),
 					createFeedbackStatCard("Pending Actions",
 							actionItemService.countActiveActionItems(currentUser.getId())));
@@ -183,19 +182,18 @@ public class DashboardView extends VerticalLayout {
 	}
 
 	private Component createStatusDistributionChart() {
-		// Instead of using Chart component, create a visualization using standard
-		// components
+		// FIXED: Use privacy-aware feedback instead of all feedback
 		VerticalLayout chartLayout = new VerticalLayout();
 		chartLayout.setWidth("100%");
 
 		H3 title = new H3("Feedback Status Distribution");
 		chartLayout.add(title);
 
-		// For MVP, we'll just count statuses
-		List<Feedback> allFeedback = feedbackService.findAllFeedback();
+		// Get only feedback that the current user is authorized to see
+		List<Feedback> visibleFeedback = feedbackService.findVisibleFeedbackForUser(currentUser.getId());
 		Map<String, Integer> statusCounts = new HashMap<>();
 
-		for (Feedback feedback : allFeedback) {
+		for (Feedback feedback : visibleFeedback) {
 			statusCounts.put(feedback.getStatus(), statusCounts.getOrDefault(feedback.getStatus(), 0) + 1);
 		}
 
@@ -282,10 +280,10 @@ public class DashboardView extends VerticalLayout {
 		// Add columns to the grid
 		grid.addColumn(feedback -> formatDate(feedback)).setHeader("Date").setAutoWidth(true);
 
-		// FIXED: Handle anonymous feedback in dashboard as well
+		// FIXED: Handle privacy-aware sender display
 		grid.addColumn(feedback -> getSenderDisplayName(feedback)).setHeader("From").setAutoWidth(true);
 
-		grid.addColumn(feedback -> feedback.getRecipient().getFullName()).setHeader("To").setAutoWidth(true);
+		grid.addColumn(feedback -> getRecipientDisplayName(feedback)).setHeader("To").setAutoWidth(true);
 		grid.addColumn(feedback -> feedback.getCategory()).setHeader("Category").setAutoWidth(true);
 		grid.addColumn(feedback -> feedback.getStatus()).setHeader("Status").setAutoWidth(true);
 
@@ -300,8 +298,8 @@ public class DashboardView extends VerticalLayout {
 			return viewButton;
 		}).setHeader("Actions").setAutoWidth(true);
 
-		// Get recent feedback (up to 5 items)
-		List<Feedback> recentFeedback = feedbackService.findAllFeedback().stream()
+		// FIXED: Get only recent feedback that the current user is authorized to see
+		List<Feedback> recentFeedback = feedbackService.findVisibleFeedbackForUser(currentUser.getId()).stream()
 				.sorted(Comparator.comparing(Feedback::getCreatedAt).reversed()).limit(5).collect(Collectors.toList());
 
 		grid.setItems(recentFeedback);
@@ -321,8 +319,8 @@ public class DashboardView extends VerticalLayout {
 	}
 
 	/**
-	 * Helper method to get the appropriate sender display name based on privacy
-	 * level
+	 * FIXED: Helper method to get the appropriate sender display name based on privacy
+	 * level and current user's relationship to the feedback
 	 */
 	private String getSenderDisplayName(Feedback feedback) {
 		// If the feedback is anonymous, hide the sender's name
@@ -330,8 +328,39 @@ public class DashboardView extends VerticalLayout {
 			return "Anonymous";
 		}
 
-		// For non-anonymous feedback, show the sender's name
+		// For private feedback, only show sender name if current user is involved
+		if (feedback.getPrivacyLevel() == PrivacyLevel.PRIVATE) {
+			boolean isCurrentUserInvolved = feedback.getSender().getId().equals(currentUser.getId()) || 
+			                               feedback.getRecipient().getId().equals(currentUser.getId());
+			if (!isCurrentUserInvolved) {
+				// This should not happen since findVisibleFeedbackForUser should filter this out,
+				// but adding as additional safety
+				return "[Private]";
+			}
+		}
+
+		// For non-anonymous feedback that the user is authorized to see, show the sender's name
 		return feedback.getSender().getFullName();
+	}
+
+	/**
+	 * FIXED: Helper method to get the appropriate recipient display name based on privacy
+	 * level and current user's relationship to the feedback
+	 */
+	private String getRecipientDisplayName(Feedback feedback) {
+		// For private feedback, only show recipient name if current user is involved
+		if (feedback.getPrivacyLevel() == PrivacyLevel.PRIVATE) {
+			boolean isCurrentUserInvolved = feedback.getSender().getId().equals(currentUser.getId()) || 
+			                               feedback.getRecipient().getId().equals(currentUser.getId());
+			if (!isCurrentUserInvolved) {
+				// This should not happen since findVisibleFeedbackForUser should filter this out,
+				// but adding as additional safety
+				return "[Private]";
+			}
+		}
+
+		// For feedback that the user is authorized to see, show the recipient's name
+		return feedback.getRecipient().getFullName();
 	}
 
 	private Component createActionItemsSummary() {
