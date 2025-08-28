@@ -115,24 +115,9 @@ public class LoginView extends VerticalLayout implements BeforeEnterObserver {
                 
                 showSuccess("Login successful!");
                 
-                // Use getUI() to ensure we have the current UI context
-                // Add a small delay to ensure the success message is visible
-                UI currentUI = UI.getCurrent();
-                if (currentUI != null) {
-                    hasRedirected = true; // Prevent any other redirects
-                    currentUI.access(() -> {
-                        try {
-                            Thread.sleep(500); // Small delay for user feedback
-                        } catch (InterruptedException ex) {
-                            Thread.currentThread().interrupt();
-                        }
-                        currentUI.navigate("");
-                        currentUI.push();
-                    });
-                } else {
-                    // Fallback - direct navigation
-                    UI.getCurrent().navigate("");
-                }
+                // FIXED: Simple navigation without push
+                hasRedirected = true;
+                UI.getCurrent().navigate("");
                 
             } else {
                 System.out.println("LoginView: Authentication failed for: " + emailValue);

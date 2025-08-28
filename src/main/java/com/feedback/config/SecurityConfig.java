@@ -23,6 +23,18 @@ public class SecurityConfig extends VaadinWebSecurity {
         // Allow H2 console in development (optional)
         http.headers(headers -> headers.frameOptions().sameOrigin());
         
+        // Additional session configuration to work with our integrated approach
+        http.sessionManagement(session -> 
+            session.maximumSessions(1)
+                   .maxSessionsPreventsLogin(false)
+                   .sessionRegistry(sessionRegistry())
+        );
+        
         System.out.println("Spring Security configuration completed");
+    }
+    
+    @org.springframework.context.annotation.Bean
+    public org.springframework.security.core.session.SessionRegistry sessionRegistry() {
+        return new org.springframework.security.core.session.SessionRegistryImpl();
     }
 }

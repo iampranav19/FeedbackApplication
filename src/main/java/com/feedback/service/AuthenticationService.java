@@ -4,10 +4,17 @@ import com.feedback.model.User;
 import com.feedback.repository.UserRepository;
 import com.vaadin.flow.server.VaadinSession;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -16,7 +23,7 @@ public class AuthenticationService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     
-    public static final String CURRENT_USER_SESSION_ATTRIBUTE = "current_user";
+    public static final String CURRENT_USER_ID_SESSION_ATTRIBUTE = "current_user_id";
     
     @Autowired
     public AuthenticationService(UserRepository userRepository, 
@@ -26,7 +33,7 @@ public class AuthenticationService {
     }
     
     /**
-     * Authenticate user with email and password using VaadinSession
+     * Authenticate user with both custom session and Spring Security
      */
     public boolean authenticate(String email, String password) {
         System.out.println("AuthenticationService.authenticate() called with email: " + email);
@@ -46,22 +53,15 @@ public class AuthenticationService {
                     userRepository.save(user);
                     System.out.println("Updated last login time for user");
                     
-                    // Store user in VaadinSession (this is what actually works)
+                    // Store user ID in VaadinSession
                     VaadinSession session = VaadinSession.getCurrent();
                     if (session != null) {
-                        session.setAttribute(CURRENT_USER_SESSION_ATTRIBUTE, user);
-                        System.out.println("User stored in VaadinSession: " + user.getFullName());
-                        
-                        // Verify it was stored
-                        User storedUser = (User) session.getAttribute(CURRENT_USER_SESSION_ATTRIBUTE);
-                        if (storedUser != null) {
-                            System.out.println("Verification: User found in session: " + storedUser.getFullName());
-                        } else {
-                            System.err.println("ERROR: User not found in session after storing!");
-                        }
-                    } else {
-                        System.err.println("ERROR: VaadinSession is null!");
+                        session.setAttribute(CURRENT_USER_ID_SESSION_ATTRIBUTE, user.getId());
+                        System.out.println("User ID stored in VaadinSession: " + user.getId());
                     }
+                    
+                    // IMPORTANT: Also authenticate with Spring Security
+                    authenticateWithSpringSecurity(user);
                     
                     return true;
                 } else {
@@ -79,19 +79,63 @@ public class AuthenticationService {
     }
     
     /**
-     * Get currently authenticated user from VaadinSession
-     * FIXED: Removed database refresh logic that was causing session clearing
+     * Authenticate the user with Spring Security
+     */
+    private void authenticateWithSpringSecurity(User user) {
+        try {
+            // Create Spring Security authority from user role
+            String roleAuthority = "ROLE_" + user.getRole().getName();
+            List<SimpleGrantedAuthority> authorities = List.of(new SimpleGrantedAuthority(roleAuthority));
+            
+            // Create Spring Security authentication token
+            Authentication auth = new UsernamePasswordAuthenticationToken(
+                user.getEmail(), 
+                null, // Don't store password in auth token
+                authorities
+            );
+            
+            // Set the authentication in Spring Security context
+            SecurityContextHolder.getContext().setAuthentication(auth);
+            
+            // Store in HTTP session so it persists across requests
+            SecurityContext securityContext = SecurityContextHolder.getContext();
+            VaadinSession vaadinSession = VaadinSession.getCurrent();
+            if (vaadinSession != null && vaadinSession.getSession() != null) {
+                vaadinSession.getSession().setAttribute(
+                    HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, 
+                    securityContext
+                );
+            }
+            
+            System.out.println("Spring Security authentication set for: " + user.getEmail() + 
+                              " with authority: " + roleAuthority);
+            
+        } catch (Exception e) {
+            System.err.println("Error setting Spring Security authentication: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Get currently authenticated user by fetching from database using stored ID
      */
     public User getCurrentUser() {
         try {
             VaadinSession session = VaadinSession.getCurrent();
             if (session != null) {
-                User user = (User) session.getAttribute(CURRENT_USER_SESSION_ATTRIBUTE);
-                if (user != null) {
-                    System.out.println("getCurrentUser() returning: " + user.getFullName());
-                    return user; // Return user from session directly - no database refresh
+                Long userId = (Long) session.getAttribute(CURRENT_USER_ID_SESSION_ATTRIBUTE);
+                if (userId != null) {
+                    Optional<User> userOptional = userRepository.findById(userId);
+                    if (userOptional.isPresent()) {
+                        return userOptional.get();
+                    } else {
+                        System.err.println("getCurrentUser() - user ID " + userId + " no longer exists in database!");
+                        // Clear invalid session
+                        session.setAttribute(CURRENT_USER_ID_SESSION_ATTRIBUTE, null);
+                        SecurityContextHolder.clearContext();
+                    }
                 } else {
-                    System.out.println("getCurrentUser() - no user in session");
+                    System.out.println("getCurrentUser() - no user ID in session");
                 }
             } else {
                 System.out.println("getCurrentUser() - no VaadinSession");
@@ -104,39 +148,22 @@ public class AuthenticationService {
     }
     
     /**
-     * Get fresh user data from database (separate method)
-     */
-    public User getFreshUserData() {
-        User sessionUser = getCurrentUser();
-        if (sessionUser != null) {
-            try {
-                Optional<User> freshUser = userRepository.findById(sessionUser.getId());
-                if (freshUser.isPresent()) {
-                    System.out.println("Refreshed user data from database");
-                    // Update the session with fresh data
-                    VaadinSession session = VaadinSession.getCurrent();
-                    if (session != null) {
-                        session.setAttribute(CURRENT_USER_SESSION_ATTRIBUTE, freshUser.get());
-                    }
-                    return freshUser.get();
-                } else {
-                    System.err.println("User no longer exists in database!");
-                    // Don't clear session automatically - let caller handle this
-                }
-            } catch (Exception e) {
-                System.err.println("Error refreshing user data: " + e.getMessage());
-            }
-        }
-        return sessionUser; // Return session user if database refresh fails
-    }
-    
-    /**
      * Check if user is authenticated
      */
     public boolean isAuthenticated() {
-        boolean authenticated = getCurrentUser() != null;
-        System.out.println("isAuthenticated() returning: " + authenticated);
-        return authenticated;
+        try {
+            // Check both custom authentication and Spring Security
+            boolean customAuth = getCurrentUser() != null;
+            boolean springAuth = SecurityContextHolder.getContext().getAuthentication() != null &&
+                                SecurityContextHolder.getContext().getAuthentication().isAuthenticated() &&
+                                !SecurityContextHolder.getContext().getAuthentication().getName().equals("anonymousUser");
+            
+            System.out.println("isAuthenticated() - Custom: " + customAuth + ", Spring: " + springAuth);
+            return customAuth && springAuth;
+        } catch (Exception e) {
+            System.err.println("Error checking authentication: " + e.getMessage());
+            return false;
+        }
     }
     
     /**
@@ -151,19 +178,30 @@ public class AuthenticationService {
     }
     
     /**
-     * Logout current user
+     * Logout current user from both systems
      */
     public void logout() {
         System.out.println("Logout called");
         try {
+            // Clear custom session
             VaadinSession session = VaadinSession.getCurrent();
             if (session != null) {
-                session.setAttribute(CURRENT_USER_SESSION_ATTRIBUTE, null);
-                session.close();
-                System.out.println("VaadinSession cleared and closed");
-            } else {
-                System.out.println("No VaadinSession to logout");
+                session.setAttribute(CURRENT_USER_ID_SESSION_ATTRIBUTE, null);
             }
+            
+            // Clear Spring Security context
+            SecurityContextHolder.clearContext();
+            
+            // Clear from HTTP session
+            if (session != null && session.getSession() != null) {
+                session.getSession().setAttribute(
+                    HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, 
+                    null
+                );
+                session.close();
+            }
+            
+            System.out.println("Logout completed - cleared both custom and Spring Security sessions");
         } catch (Exception e) {
             System.err.println("Logout error: " + e.getMessage());
             e.printStackTrace();
@@ -210,7 +248,7 @@ public class AuthenticationService {
     }
     
     /**
-     * Check if user can view/edit specific user data
+     * Check if user can access specific user data
      */
     public boolean canAccessUser(User targetUser) {
         User currentUser = getCurrentUser();
