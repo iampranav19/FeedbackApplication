@@ -1,6 +1,8 @@
+
 package com.feedback.ui.views.dashboard;
 
 import com.feedback.model.Feedback;
+import com.feedback.model.PrivacyLevel;
 import com.feedback.model.User;
 import com.feedback.service.ActionItemService;
 import com.feedback.service.AuthenticationService;
@@ -28,7 +30,6 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.router.RouterLink;
 import jakarta.annotation.security.PermitAll;
-
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
@@ -41,13 +42,12 @@ import java.util.stream.Collectors;
 @PageTitle("Dashboard | Feedback System")
 @PermitAll
 public class DashboardView extends VerticalLayout {
-
 	private final FeedbackService feedbackService;
 	private final UserService userService;
 	private final ActionItemService actionItemService;
 	private final AuthenticationService authenticationService;
 	private User currentUser;
-	
+
 	private boolean hasRedirected = false; // Prevent infinite redirects
 
 	public DashboardView(FeedbackService feedbackService, UserService userService, ActionItemService actionItemService,
@@ -58,26 +58,26 @@ public class DashboardView extends VerticalLayout {
 		this.authenticationService = authenticationService;
 
 		System.out.println("DashboardView: Constructor started");
-		
+
 		// FIXED: More defensive authentication check
 		this.currentUser = authenticationService.getCurrentUser();
-		
+
 		if (this.currentUser == null) {
 			System.err.println("DashboardView: Current user is null - authentication issue detected");
-			
+
 			// Instead of immediately redirecting, show error message and provide login link
 			if (!hasRedirected) {
 				hasRedirected = true;
-				
+
 				// Show error message with login option
 				VerticalLayout errorLayout = new VerticalLayout();
 				errorLayout.setAlignItems(FlexComponent.Alignment.CENTER);
 				errorLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.CENTER);
 				errorLayout.setSizeFull();
-				
+
 				H2 errorTitle = new H2("Authentication Required");
 				Span errorMessage = new Span("Please log in to access the dashboard.");
-				
+
 				Button loginButton = new Button("Go to Login");
 				loginButton.addClickListener(e -> {
 					try {
@@ -89,7 +89,7 @@ public class DashboardView extends VerticalLayout {
 						UI.getCurrent().getPage().reload();
 					}
 				});
-				
+
 				errorLayout.add(errorTitle, errorMessage, loginButton);
 				add(errorLayout);
 				return;
@@ -109,46 +109,44 @@ public class DashboardView extends VerticalLayout {
 
 		// Create dashboard content
 		createDashboardContent();
-		
+
 		System.out.println("DashboardView: Successfully initialized");
 	}
 
 	private void createDashboardContent() {
-        try {
-            // Create stats layout
-            HorizontalLayout statsLayout = new HorizontalLayout(
-                createFeedbackStatCard("Total Feedback", feedbackService.findAllFeedback().size()),
-                createFeedbackStatCard("Unread Feedback", 
-                                       feedbackService.countUnreadFeedback(currentUser.getId())),
-                createFeedbackStatCard("Pending Actions", 
-                                      actionItemService.countActiveActionItems(currentUser.getId()))
-            );
-            statsLayout.setWidthFull();
-            statsLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.CENTER);
-            statsLayout.setSpacing(true);
-            
-            add(statsLayout);
-            add(createStatusDistributionChart());
-            add(createRecentFeedbackSection());
-            add(createActionItemsSummary());
-            
-        } catch (Exception e) {
-            // Better error handling
-            System.err.println("Error creating dashboard content: " + e.getMessage());
-            e.printStackTrace();
-            
-            // Show user-friendly error message
-            VerticalLayout errorLayout = new VerticalLayout();
-            errorLayout.setAlignItems(FlexComponent.Alignment.CENTER);
-            
-            Span errorMessage = new Span("Error loading dashboard content. Please try refreshing the page.");
-            Button refreshButton = new Button("Refresh Page");
-            refreshButton.addClickListener(e2 -> UI.getCurrent().getPage().reload());
-            
-            errorLayout.add(errorMessage, refreshButton);
-            add(errorLayout);
-        }
-    }
+		try {
+			// Create stats layout
+			HorizontalLayout statsLayout = new HorizontalLayout(
+					createFeedbackStatCard("Total Feedback", feedbackService.findAllFeedback().size()),
+					createFeedbackStatCard("Unread Feedback", feedbackService.countUnreadFeedback(currentUser.getId())),
+					createFeedbackStatCard("Pending Actions",
+							actionItemService.countActiveActionItems(currentUser.getId())));
+			statsLayout.setWidthFull();
+			statsLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.CENTER);
+			statsLayout.setSpacing(true);
+
+			add(statsLayout);
+			add(createStatusDistributionChart());
+			add(createRecentFeedbackSection());
+			add(createActionItemsSummary());
+
+		} catch (Exception e) {
+			// Better error handling
+			System.err.println("Error creating dashboard content: " + e.getMessage());
+			e.printStackTrace();
+
+			// Show user-friendly error message
+			VerticalLayout errorLayout = new VerticalLayout();
+			errorLayout.setAlignItems(FlexComponent.Alignment.CENTER);
+
+			Span errorMessage = new Span("Error loading dashboard content. Please try refreshing the page.");
+			Button refreshButton = new Button("Refresh Page");
+			refreshButton.addClickListener(e2 -> UI.getCurrent().getPage().reload());
+
+			errorLayout.add(errorMessage, refreshButton);
+			add(errorLayout);
+		}
+	}
 
 	private Component createFeedbackStatCard(String title, long value) {
 		VerticalLayout layout = new VerticalLayout();
@@ -185,7 +183,8 @@ public class DashboardView extends VerticalLayout {
 	}
 
 	private Component createStatusDistributionChart() {
-		// Instead of using Chart component, create a visualization using standard components
+		// Instead of using Chart component, create a visualization using standard
+		// components
 		VerticalLayout chartLayout = new VerticalLayout();
 		chartLayout.setWidth("100%");
 
@@ -282,7 +281,10 @@ public class DashboardView extends VerticalLayout {
 
 		// Add columns to the grid
 		grid.addColumn(feedback -> formatDate(feedback)).setHeader("Date").setAutoWidth(true);
-		grid.addColumn(feedback -> feedback.getSender().getFullName()).setHeader("From").setAutoWidth(true);
+
+		// FIXED: Handle anonymous feedback in dashboard as well
+		grid.addColumn(feedback -> getSenderDisplayName(feedback)).setHeader("From").setAutoWidth(true);
+
 		grid.addColumn(feedback -> feedback.getRecipient().getFullName()).setHeader("To").setAutoWidth(true);
 		grid.addColumn(feedback -> feedback.getCategory()).setHeader("Category").setAutoWidth(true);
 		grid.addColumn(feedback -> feedback.getStatus()).setHeader("Status").setAutoWidth(true);
@@ -316,6 +318,20 @@ public class DashboardView extends VerticalLayout {
 				.set("box-shadow", "var(--lumo-box-shadow-xs)");
 
 		return layout;
+	}
+
+	/**
+	 * Helper method to get the appropriate sender display name based on privacy
+	 * level
+	 */
+	private String getSenderDisplayName(Feedback feedback) {
+		// If the feedback is anonymous, hide the sender's name
+		if (feedback.getPrivacyLevel() == PrivacyLevel.ANONYMOUS) {
+			return "Anonymous";
+		}
+
+		// For non-anonymous feedback, show the sender's name
+		return feedback.getSender().getFullName();
 	}
 
 	private Component createActionItemsSummary() {
